@@ -1,437 +1,391 @@
-# Tracklet --- Public Technical Overview
 
-**Tracklet** (https://tracklet.me) is a minimal, table-first assignment
-tracker designed for students who prefer spreadsheet-style organization
-over kanban boards or productivity dashboards.
+# Tracklet — System Architecture & Technical Overview
 
-Think:
+Tracklet (https://tracklet.me) is a **table‑first assignment tracking platform** designed for students who prefer spreadsheet‑style workflows over traditional task boards.
 
-> **Google Sheets --- purpose-built for assignments.**
+Instead of kanban boards or complex productivity systems, Tracklet focuses on:
 
-This repository provides a **technical overview of the system
-architecture** behind Tracklet.
+- Fast spreadsheet‑style editing
+- Clear deadline visibility
+- Minimal UI friction
+- Reliable reminder automation
 
-The application source code remains **private**, but this documentation
-outlines:
+This repository documents the **public technical architecture** behind Tracklet.
 
--   System architecture
--   Database schema
--   API design
--   Infrastructure
--   Security architecture
--   Engineering decisions
+The production source code is **not included**. This repository exists to provide transparency into the engineering design and infrastructure powering the platform.
 
-The goal is **technical transparency without exposing proprietary
-business logic**.
-
-------------------------------------------------------------------------
+---
 
 # System Overview
 
-Tracklet is a SaaS web application built for students to manage
-assignments, deadlines, and coursework.
+Tracklet is a **production SaaS web application** that enables students to track assignments, courses, and deadlines in a structured table interface.
 
-Key design principles:
+The core product design focuses on:
 
--   Minimal friction
--   Spreadsheet-style workflows
--   Fast inline editing
--   Reliable deadline tracking
--   Subscription-based SaaS model
+- **High‑density data views** (spreadsheet interface)
+- **Fast inline editing**
+- **Minimal navigation overhead**
+- **Reliable deadline reminders**
+- **Subscription‑based SaaS monetization**
 
-Unlike typical productivity apps, Tracklet prioritizes:
+Unlike typical productivity tools that emphasize visual boards or dashboards, Tracklet prioritizes **structured data workflows** similar to Google Sheets.
 
--   speed
--   clarity
--   data density
+---
 
-------------------------------------------------------------------------
+# Technology Stack
 
-# Tech Stack
+| Layer | Technology |
+|------|------------|
+| Framework | Next.js 16 (App Router) |
+| Language | TypeScript (strict mode) |
+| UI Framework | Tailwind CSS v4 |
+| UI Components | shadcn/ui |
+| Data Table | TanStack Table v8 |
+| ORM | Prisma v7 |
+| Database | PostgreSQL 17 (Neon Serverless) |
+| Authentication | NextAuth v5 |
+| Payments | Stripe |
+| Email | Resend |
+| File Storage | Vercel Blob |
+| Hosting | Vercel |
+| CI/CD | GitHub Actions |
+| Package Manager | pnpm |
 
-  Layer             Technology
-  ----------------- ---------------------------------
-  Framework         Next.js 16 (App Router)
-  Language          TypeScript (strict mode)
-  Styling           Tailwind CSS v4
-  UI Components     shadcn/ui
-  Table Engine      TanStack Table v8
-  Database ORM      Prisma v7
-  Database          PostgreSQL 17 (Neon serverless)
-  Authentication    NextAuth v5
-  Payments          Stripe
-  Email             Resend
-  Storage           Vercel Blob
-  Hosting           Vercel
-  CI                GitHub Actions
-  Package Manager   pnpm
+---
 
-------------------------------------------------------------------------
+# High‑Level Architecture
 
-# High Level Architecture
+```mermaid
+flowchart TD
 
-```
-                ┌─────────────────────┐
-                │       Browser       │
-                │    Next.js Client   │
-                └──────────┬──────────┘
-                           │
-                           ▼
-                ┌─────────────────────┐
-                │     Next.js App     │
-                │ Server Actions + API│
-                └──────────┬──────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        ▼                  ▼                  ▼
- ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
- │ PostgreSQL  │   │   Stripe    │   │   Resend    │
- │    (Neon)   │   │ Billing API │   │ Email API   │
- └─────────────┘   └─────────────┘   └─────────────┘
+    Browser["Browser<br/>Next.js Client"]
+    App["Next.js App<br/>Server Actions + API Routes"]
+
+    DB["PostgreSQL (Neon)"]
+    Stripe["Stripe Billing API"]
+    Email["Resend Email API"]
+
+    OAuth["Google OAuth"]
+    Storage["Vercel Blob Storage"]
+    Cron["Vercel Cron Jobs"]
+
+    Browser --> App
+    App --> DB
+    App --> Stripe
+    App --> Email
+    App --> OAuth
+    App --> Storage
+    App --> Cron
 ```
 
-**External Integrations**
+The system follows a **server‑centric architecture** where most mutations occur through **Next.js Server Actions**, while selected operations use lightweight API endpoints.
 
-- Google OAuth  
-- Vercel Blob Storage  
-- Vercel Cron Jobs
-
-------------------------------------------------------------------------
+---
 
 # Core Product Architecture
 
-Tracklet is built around a **table-first interaction model**.
+Tracklet is built around a **table‑first interaction model**.
 
-The assignment table is the primary interface where users:
+The assignment table acts as the central UI where users can:
 
--   create assignments
--   edit fields inline
--   filter and sort
--   track deadlines
--   manage course workloads
+- Create assignments
+- Edit fields inline
+- Sort and filter tasks
+- Track due dates
+- Monitor course workloads
 
-Core architectural patterns:
+Key engineering patterns include:
 
--   Optimistic UI updates
--   Minimal page revalidation
--   Server-side subscription enforcement
--   Relational database modeling
+- Optimistic UI updates
+- Minimal server revalidation
+- Strong relational database modeling
+- Server‑side subscription enforcement
 
-------------------------------------------------------------------------
+---
 
-# Database Schema
+# Database Architecture
 
-Tracklet uses **8 core database models**.
+Tracklet uses a relational schema built on **PostgreSQL**.
 
-## Enums
+Primary entities include:
 
-PlanStatus: FREE, PRO
+- Users
+- Trackers
+- Courses
+- Assignments
 
-AssignmentStatus: SUBMITTED, IN_PROGRESS, NOT_STARTED
+Additional support models handle:
 
-AssignmentType: ASSIGNMENT, LAB, QUIZ, TEST, EXAM, PROJECT, OTHER
+- Authentication
+- OAuth accounts
+- Sessions
+- Verification tokens
+- Rate limiting
 
-------------------------------------------------------------------------
+## Entity Relationships
 
-## User
+```mermaid
+erDiagram
 
-Stores account information and subscription state.
+USER ||--o{ TRACKER : owns
+TRACKER ||--o{ COURSE : contains
+TRACKER ||--o{ ASSIGNMENT : contains
+COURSE ||--o{ ASSIGNMENT : groups
 
-Fields:
+USER {
+    string id
+    string email
+    string name
+    string planStatus
+    string timezone
+}
 
-id\
-name\
-email\
-password\
-image\
-planStatus\
-stripeCustomerId\
-stripeSubscriptionId\
-timezone\
-reminderEnabled\
-reminderDays\
-weeklySummaryEnabled\
-calendarToken\
-clearStreak\
-onTimeStreak\
-lastStreakCheckDate
+TRACKER {
+    string id
+    string name
+    boolean isArchived
+}
 
-------------------------------------------------------------------------
+COURSE {
+    string id
+    string name
+}
 
-## Tracker
+ASSIGNMENT {
+    string id
+    string title
+    string status
+    date dueDate
+}
+```
 
-Represents a collection of assignments.
+---
 
-Fields:
+# Authentication Architecture
 
-id\
-name\
-order\
-isArchived\
-shareId\
-isPublic\
-userId
+Tracklet supports **two authentication strategies**.
 
-------------------------------------------------------------------------
+### OAuth
 
-## Course
+- Google OAuth via NextAuth
 
-Courses group assignments within a tracker.
+### Credentials
 
-Constraint:
+- Email/password authentication
+- bcrypt password hashing
+- OTP verification
+- Password reset flow
 
-UNIQUE(trackerId, name)
+Security protections include:
 
-------------------------------------------------------------------------
+- Login rate limiting
+- Brute‑force protection
+- Email enumeration prevention
 
-## Assignment
-
-Primary record representing academic work.
-
-Fields:
-
-id\
-title\
-status\
-type\
-dueDate\
-dueTime\
-todo\
-checklist\
-pointsEarned\
-pointsPossible\
-weight\
-courseId\
-trackerId\
-isOnTimeStreakCounted
-
-The checklist field stores JSON data.
-
-------------------------------------------------------------------------
-
-# Authentication
-
-Tracklet supports two authentication strategies.
-
-## OAuth
-
-Google OAuth handled through NextAuth v5.
-
-## Email + Password
-
-Credential authentication includes:
-
--   bcrypt password hashing
--   OTP verification
--   password reset flow
-
-Security protections:
-
--   login rate limiting
--   brute force protection
--   email enumeration prevention
-
-------------------------------------------------------------------------
+---
 
 # API Design
 
-## Authentication
+Tracklet exposes a minimal set of REST endpoints.
 
-/api/auth/\[...nextauth\]
+| Endpoint | Method | Purpose |
+|--------|-------|--------|
+| /api/auth/[...nextauth] | GET / POST | Authentication |
+| /api/webhooks/stripe | POST | Stripe subscription lifecycle |
+| /api/assignments/[id] | PATCH | Inline editing |
+| /api/calendar/[token] | GET | iCalendar export |
+| /api/upload/avatar | POST | Avatar upload |
+| /api/cron/reminders | GET | Daily reminders |
+| /api/cron/weekly-summary | GET | Weekly summaries |
 
-Handles OAuth and credential sessions.
-
-------------------------------------------------------------------------
-
-## Assignment Updates
-
-PATCH /api/assignments/\[id\]
-
-Used for inline editing inside the assignment table.
-
-Goal: avoid expensive page revalidation.
-
-------------------------------------------------------------------------
-
-## Stripe Webhooks
-
-POST /api/webhooks/stripe
-
-Handles:
-
--   checkout completion
--   subscription updates
--   payment failures
-
-Webhook signatures are verified.
-
-------------------------------------------------------------------------
-
-## Calendar Export
-
-GET /api/calendar/\[token\]
-
-Returns an iCalendar (.ics) feed compliant with RFC 5545.
-
-Features:
-
--   VALARM reminders
--   token-based authentication
--   regeneration capability
-
-------------------------------------------------------------------------
+---
 
 # Background Jobs
 
+Tracklet uses **Vercel Cron Jobs** to execute scheduled tasks.
+
 ## Daily Reminder Job
 
-/api/cron/reminders
-
-Runs daily at 08:00 UTC.
+Runs at **08:00 UTC**.
 
 Responsibilities:
 
--   detect upcoming assignments
--   send reminder emails
-
-------------------------------------------------------------------------
+- Detect upcoming assignments
+- Send reminder emails
 
 ## Weekly Summary Job
 
-/api/cron/weekly-summary
-
 Runs every Monday.
 
-Includes:
+Generates:
 
--   upcoming assignments
--   overdue work
+- Upcoming assignments
+- Overdue tasks
 
-Emails are timezone-aware.
+Emails are **timezone‑aware**.
 
-------------------------------------------------------------------------
+---
 
-# Subscription System
+# Subscription Model
 
-Plans:
+Tracklet uses a **Stripe subscription architecture**.
 
-FREE --- max 2 trackers\
-PRO --- \$3.99/month unlimited trackers, reminders, weekly summaries,
-calendar sync
+| Plan | Features |
+|-----|----------|
+| Free | Up to 2 trackers |
+| Pro ($3.99/month) | Unlimited trackers, reminders, calendar sync |
 
-Enforcement occurs at two layers:
+Subscription enforcement occurs at two levels:
 
-1.  UI layer (disabled controls)
-2.  Server layer (hard enforcement)
+1. UI restrictions
+2. Server‑side validation
 
-On subscription downgrade:
+When a subscription expires:
 
--   existing trackers preserved
--   new tracker creation blocked
+- Existing trackers remain
+- Creation of new trackers is restricted
 
-------------------------------------------------------------------------
+---
 
 # Security Architecture
 
-HTTP Security Headers:
+Security was integrated early in development.
 
--   HSTS
--   X-Frame-Options: DENY
--   X-Content-Type-Options: nosniff
+## HTTP Security Headers
 
-Password hashing:
+- HSTS
+- X‑Frame‑Options: DENY
+- X‑Content‑Type‑Options: nosniff
 
-bcrypt (cost factor 12)
+## Password Security
 
-Rate limiting:
+Passwords are hashed using:
 
-10 attempts per 15 minutes
+- bcrypt
+- cost factor 12
 
-OTP protection:
+## Login Rate Limiting
 
-max 5 attempts per token
+Maximum:
 
-Stripe webhook signatures verified.
+- 10 attempts per 15 minutes
 
-------------------------------------------------------------------------
+Stored in the database.
 
-# Performance Design
+## OTP Protection
 
-Optimistic UI updates allow inline table edits without full page reload.
+- Maximum 5 attempts per token
+- Token invalidated on lockout
 
-Hydration-safe localStorage logic uses:
+## Webhook Security
 
--   useEffect synchronization
--   suppressHydrationWarning
+Stripe webhook signatures are verified before processing.
 
-Timezone handling:
+---
 
-Dates stored as UTC midnight.\
-Times stored as strings to preserve timezone accuracy.
+# Performance Architecture
 
-------------------------------------------------------------------------
+## Optimistic UI
+
+Inline edits update the interface immediately while persisting asynchronously.
+
+Benefits:
+
+- Reduced latency perception
+- Improved UX responsiveness
+
+## Hydration Safety
+
+Local storage UI states are synchronized using:
+
+- useEffect
+- suppressHydrationWarning
+
+## Timezone Handling
+
+Dates stored as:
+
+- UTC midnight
+
+Times stored separately to preserve timezone context.
+
+DST‑safe offset calculations are applied during conversion.
+
+---
 
 # Infrastructure
 
-Hosting: Vercel\
-Database: Neon (PostgreSQL)\
-Payments: Stripe\
-Email: Resend\
-Storage: Vercel Blob
+| Component | Provider |
+|----------|---------|
+| Hosting | Vercel |
+| Database | Neon |
+| Payments | Stripe |
+| Email | Resend |
+| Storage | Vercel Blob |
 
-------------------------------------------------------------------------
+---
 
-# CI Pipeline
+# CI/CD Pipeline
 
-GitHub Actions pipeline:
+Continuous integration runs through GitHub Actions.
 
-pnpm typecheck\
-pnpm lint\
-pnpm build
+Pipeline:
 
-Build fails on any error.
+1. Type checking
+2. Linting
+3. Build validation
 
-------------------------------------------------------------------------
+Build failures block deployment.
 
-# Environment Variables
+---
 
-DATABASE_URL\
-AUTH_SECRET\
-AUTH_GOOGLE_ID\
-AUTH_GOOGLE_SECRET\
-STRIPE_SECRET_KEY\
-STRIPE_PRICE_ID_MONTHLY\
-STRIPE_PRICE_ID_ANNUAL\
-STRIPE_WEBHOOK_SECRET\
-NEXT_PUBLIC_APP_URL\
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY\
-RESEND_API_KEY\
-RESEND_FROM_EMAIL\
-CRON_SECRET\
-BLOB_READ_WRITE_TOKEN
+# Engineering Notes
 
-------------------------------------------------------------------------
+Several architectural decisions shaped Tracklet's design.
 
-# Status
+### Table‑First UX
+
+Most productivity apps emphasize dashboards or boards.
+
+Tracklet instead focuses on **structured tabular workflows**.
+
+### Optimistic Editing
+
+Inline edits avoid full page revalidation to maintain responsiveness.
+
+### Server Action Architecture
+
+Next.js Server Actions simplify:
+
+- authentication
+- validation
+- mutation logic
+
+### Subscription Enforcement
+
+Limits are enforced both client‑side and server‑side to prevent bypassing.
+
+---
+
+# System Status
 
 Tracklet is currently:
 
--   production deployed
--   feature complete
--   CI verified
--   actively maintained
+- Production deployed
+- Feature complete
+- CI verified
+- Actively maintained
 
-------------------------------------------------------------------------
+---
 
-# Why the Source Code is Private
+# Source Code Availability
 
-Tracklet is a commercial SaaS product.
+Tracklet is a **commercial SaaS product**.
 
-This repository documents system architecture while keeping proprietary
-implementation details private.
+This repository documents architecture while keeping the proprietary implementation private.
 
-The goal is to balance:
+The purpose is to balance:
 
--   technical transparency
--   engineering credibility
--   sustainable business development
+- Technical transparency
+- Engineering credibility
+- Sustainable product development
